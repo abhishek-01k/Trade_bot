@@ -20,11 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAccount } from "wagmi";
-import { mainnet } from "wagmi/chains";
-import { sendTransaction } from "@wagmi/core";
+import { useActiveAccount } from "thirdweb/react";
 import brian from "@/lib/brian";
-import { wagmiConfig } from "@/config/wagmi";
+import { sendAndConfirmTransaction } from "thirdweb";
 import { ChainId, executeRoute, getRoutes } from "@lifi/sdk";
 import { SwapPayload } from "@/types/trade";
 import {
@@ -61,7 +59,7 @@ export default function MultiChainAITrading() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // const { address } = useWeb3ModalAccount()
-  const { isConnected, chainId, address } = useAccount();
+  const { isConnected, chainId, address } = useActiveAccount();
 
   console.log(address, isConnected, chainId);
   useEffect(() => {
