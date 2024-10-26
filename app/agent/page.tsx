@@ -31,7 +31,7 @@ import {
   TokenManagement,
 } from "@/constants/TokenDetails";
 import { ErrorToast } from "@/lib/error";
-
+import { useSendAndConfirmTransaction } from "thirdweb/react";
 
 async function translateText(
   text: string,
@@ -57,12 +57,16 @@ export default function MultiChainAITrading() {
   const [protocol, setProtocol] = useState("askme");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [chainId, setChainId] = useState<number | undefined>(undefined);
 
   // const { address } = useWeb3ModalAccount()
   const activeAccount= useActiveAccount();
 
   const address = activeAccount?.address;
-  
+
+  const { mutate: sendAndConfirmTx, data: transactionReceipt } =
+  useSendAndConfirmTransaction();
+
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -151,7 +155,7 @@ export default function MultiChainAITrading() {
     const message = messages[messageIndex];
     if (!message.canExecute) return;
 
-    if (!isConnected) {
+    if (!address) {
       alert("Please connect your wallet");
       return;
     }
@@ -159,6 +163,8 @@ export default function MultiChainAITrading() {
     const result = await brian.extract({
       prompt: message.content,
     });
+
+  
 
     console.log("executing txn with result", result);
 
@@ -205,7 +211,7 @@ export default function MultiChainAITrading() {
       const transactionResult = await brian.transact({
         ...result,
         address: address,
-        chainId: chainId ? `${chainId}` : `${mainnet.id}`,
+        chainId: chainId ? `${chainId}` : '1',
       });
 
       console.log("Transaction Result:", transactionResult);
@@ -226,7 +232,7 @@ export default function MultiChainAITrading() {
           console.log("Tx >>", tx);
 
           try {
-            const hash = await sendTransaction(wagmiConfig, tx);
+            const hash = await sendAndConfirmTx( tx);
             console.log("Transaction Hash >>", hash);
             setMessages((prev) => [
               ...prev,
@@ -288,8 +294,12 @@ export default function MultiChainAITrading() {
     }
   };
 
-
-
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
 
   return (
     <>
@@ -396,6 +406,7 @@ export default function MultiChainAITrading() {
               <Textarea
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
+                onKeyDown={handleKeyPress}
                 className="flex-grow text-lg"
                 rows={3}
                 placeholder={`Type your command in ${
@@ -406,6 +417,7 @@ export default function MultiChainAITrading() {
               <Input
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
+                onKeyDown={handleKeyPress}
                 placeholder={`Type or speak your command in ${
                   language === "en" ? "English" : "your selected language"
                 }...`}
