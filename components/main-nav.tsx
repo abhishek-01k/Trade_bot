@@ -4,8 +4,6 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { siteConfig } from "@/config/site";
 import { NavItem } from "@/types/nav";
-import { ConnectButton } from "thirdweb/react";
-import { thirdwebclient } from "@/lib/client";
 
 interface MainNavProps {
   items?: NavItem[];
@@ -36,7 +34,6 @@ export function MainNav({ items }: MainNavProps) {
           )}
         </nav>
       ) : null}
-      <ConnectButton client={thirdwebclient} />
     </div>
   );
 }

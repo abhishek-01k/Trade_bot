@@ -1,8 +1,8 @@
-import { toast } from "@/hooks/use-toast"
+import { Toast } from "@/components/ui/toast";
 
 export const ErrorToast = (title: string) => {
-    toast({
-        variant: 'destructive',
-        title,
-    })
-}
+  Toast({
+    variant: "destructive",
+    title,
+  });
+};

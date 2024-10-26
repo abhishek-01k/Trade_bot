@@ -1,6 +1,8 @@
 import { siteConfig } from "@/config/site";
 import { MainNav } from "./main-nav";
 import { ThemeToggle } from "./theme-toogle";
+import { ConnectButton } from "thirdweb/react";
+import { thirdwebclient } from "@/lib/client";
 
 export function SiteHeader() {
   return (
@@ -9,6 +11,7 @@ export function SiteHeader() {
         <MainNav items={siteConfig.mainNav} />
         <div className="flex flex-1 items-center justify-end space-x-4">
           <nav className="flex items-center space-x-1">
+            <ConnectButton client={thirdwebclient} />
             <ThemeToggle />
           </nav>
         </div>
