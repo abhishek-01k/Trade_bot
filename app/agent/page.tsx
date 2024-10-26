@@ -59,9 +59,10 @@ export default function MultiChainAITrading() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // const { address } = useWeb3ModalAccount()
-  const { isConnected, chainId, address } = useActiveAccount();
+  const activeAccount= useActiveAccount();
 
-  console.log(address, isConnected, chainId);
+  const address = activeAccount?.address;
+  
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
