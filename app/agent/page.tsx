@@ -20,11 +20,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useActiveAccount, useActiveWallet } from "thirdweb/react";
+import { useActiveAccount , useActiveWallet } from "thirdweb/react";
 import brian from "@/lib/brian";
-import { executeRoute, getRoutes } from "@lifi/sdk";
+import { sendAndConfirmTransaction } from "thirdweb";
+import { ChainId, executeRoute, getRoutes } from "@lifi/sdk";
 import { SwapPayload } from "@/types/trade";
-import { findChainIdByName, processAmount } from "@/constants/TokenDetails";
+import {
+  findChainIdByName,
+  processAmount,
+  TokenManagement,
+} from "@/constants/TokenDetails";
 import { ErrorToast } from "@/lib/error";
 import { useSendAndConfirmTransaction } from "thirdweb/react";
 import { generateQuote, generateTransaction } from "@/config/odosTransaction";
@@ -51,18 +56,45 @@ export default function MultiChainAITrading() {
   const [isEditing, setIsEditing] = useState(false);
   const [language, setLanguage] = useState("en");
   const [protocol, setProtocol] = useState("askme");
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionResult | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [chainId, setChainId] = useState<number | undefined>(undefined);
 
+  // odos swap
+
+  const [quotePathId, setQuotePathId] = useState("");
+  const totalTime = 60;
+  const [timeLeft, setTimeLeft] = useState(60);
+  const [isActive, setIsActive] = useState(false);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null; // Declare timer variable
+
+    if (isActive) {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev === 1) {
+            setQuotePathId("");
+            return totalTime; // Reset timer to 60 seconds
+          }
+          return prev - 1; // Decrease timer
+        });
+      }, 1000); // Update every second
+    }
+
+    return () => {
+      if (timer) clearInterval(timer); // Cleanup on unmount
+    };
+  }, [isActive]);
+
   // const { address } = useWeb3ModalAccount()
-  const activeAccount = useActiveAccount();
+  const activeAccount= useActiveAccount();
   const wallet = useActiveWallet();
 
   const address = activeAccount?.address;
 
   const { mutate: sendAndConfirmTx, data: transactionReceipt } =
-    useSendAndConfirmTransaction();
+  useSendAndConfirmTransaction();
 
   useEffect(() => {
     const SpeechRecognition =
@@ -161,9 +193,13 @@ export default function MultiChainAITrading() {
       prompt: message.content,
     });
 
+  
+
     console.log("executing txn with result", result);
 
     if (result && result.completion[0].chain == "rootstock") {
+      //TODO: @kamal call it here with the payload defined on line 256
+      // handleSwap({})
       const { action, amount, chain, token1, token2 } = result.completion[0];
       const sourceChain = findChainIdByName(token1);
       const destinationChain = findChainIdByName(token2);
@@ -199,56 +235,114 @@ export default function MultiChainAITrading() {
           amount: parsedAmount,
         });
       }
+    } else if (result && protocol === "odos") {
+      try {
+        const { action, amount, token1, token2 } = result.completion[0];
+        
+        if (!address) {
+          ErrorToast("Please connect your wallet first");
+          return;
+        }
+    
+        if (action === "swap") {
+          // Generate quote first
+          const quoteFetched = await generateQuote({
+            chainId: "1", // Assuming Ethereum mainnet, adjust if needed
+            userAddr: address,
+            inputTokenAddress: token1.address,
+            outputTokenAddress: token2.address,
+            amount: processAmount(amount, token1.decimals).toString(),
+          });
+    
+          console.log("ODOS Quote fetched:", quoteFetched);
+          const { pathId } = quoteFetched;
+    
+          if (!pathId) {
+            ErrorToast("Failed to get quote from ODOS");
+            return;
+          }
+    
+          // Generate and execute transaction
+          const transactionQuote = await generateTransaction({
+            userAddr: address,
+            pathId: pathId,
+          });
+    
+          console.log("ODOS Transaction quote:", transactionQuote);
+          const { transaction } = transactionQuote;
+    
+          const txResult = await activeAccount.sendTransaction(transaction);
+          console.log("ODOS Transaction result:", txResult);
+    
+          // Add success message to chat
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `Successfully executed ODOS swap transaction. Hash: ${txResult.hash}`,
+            },
+          ]);
+        }
+      } catch (error: any) {
+        console.error("ODOS Swap Error:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `Error executing ODOS swap: ${error.message}`,
+          },
+        ]);
+      }
     } else if (result && address) {
+
       const chainId = await wallet?.getChain();
-
       console.log("Executing Transaction >>", result, address, chainId);
-      // const transactionResult = await brian.transact({
-      //   ...result,
-      //   address: address,
-      //   chainId: chainId ? `${chainId}` : `${mainnet.id}`,
-      // });
+      const transactionResult = await brian.transact({
+        ...result,
+        address: address,
+        chainId: chainId ? `${chainId}` : '1',
+      });
 
-      // console.log("Transaction Result:", transactionResult);
+      console.log("Transaction Result:", transactionResult);
 
-      // const { data } = transactionResult[0];
-      // const { steps } = data;
-      // if (steps) {
-      //   console.log("Steps >>", steps);
-      //   for (const step of steps) {
-      //     const { from, to, value, data } = step;
+      const { data } = transactionResult[0];
+      const { steps } = data;
+      if (steps) {
+        console.log("Steps >>", steps);
+        for (const step of steps) {
+          const { from, to, value, data } = step;
 
-      //     const tx = {
-      //       from: from,
-      //       to,
-      //       value: BigInt(value), // Default to "0" if value is not provided
-      //       data,
-      //     };
-      //     console.log("Tx >>", tx);
+          const tx = {
+            from: from,
+            to,
+            value: BigInt(value), // Default to "0" if value is not provided
+            data,
+          };
+          console.log("Tx >>", tx);
 
-      //     try {
-      //       const hash = await sendTransaction(wagmiConfig, tx);
-      //       console.log("Transaction Hash >>", hash);
-      //       setMessages((prev) => [
-      //         ...prev,
-      //         {
-      //           role: "assistant",
-      //           content: `Transaction executed successfully. Hash: ${hash}`,
-      //         },
-      //       ]);
-      //     } catch (error: any) {
-      //       console.error("Transaction Error >>", error);
-      //       setMessages((prev) => [
-      //         ...prev,
-      //         {
-      //           role: "assistant",
-      //           content: `Error executing transaction: ${error.message}`,
-      //         },
-      //       ]);
-      //       break; // Stop further transactions if one fails
-      //     }
-      //   }
-      // }
+          try {
+            const hash = await sendAndConfirmTx( tx);
+            console.log("Transaction Hash >>", hash);
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Transaction executed successfully. Hash: ${hash}`,
+              },
+            ]);
+          } catch (error: any) {
+            console.error("Transaction Error >>", error);
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `Error executing transaction: ${error.message}`,
+              },
+            ]);
+            break; // Stop further transactions if one fails
+          }
+        }
+      }
     }
   };
 
@@ -289,30 +383,6 @@ export default function MultiChainAITrading() {
     }
   };
 
-  const [quotePathId, setQuotePathId] = useState("");
-  const totalTime = 60;
-  const [timeLeft, setTimeLeft] = useState(60);
-  const [isActive, setIsActive] = useState(false);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null; // Declare timer variable
-
-    if (isActive) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev === 1) {
-            setQuotePathId("");
-            return totalTime; // Reset timer to 60 seconds
-          }
-          return prev - 1; // Decrease timer
-        });
-      }, 1000); // Update every second
-    }
-
-    return () => {
-      if (timer) clearInterval(timer); // Cleanup on unmount
-    };
-  }, [isActive]);
 
   const handleOdosSwap = async () => {
     if (!address) return;
@@ -356,7 +426,7 @@ export default function MultiChainAITrading() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
@@ -390,6 +460,7 @@ export default function MultiChainAITrading() {
               <SelectItem value="odos">ODOS</SelectItem>
               <SelectItem value="askme">Ask Me</SelectItem>
               <SelectItem value="txn">Get Info about a txn</SelectItem>
+              <SelectItem value="swap">Swap</SelectItem>
             </SelectContent>
           </Select>
         </CardHeader>
