@@ -33,14 +33,6 @@ import {
   TokenManagement,
 } from "@/constants/TokenDetails";
 import { ErrorToast } from "@/lib/error";
-import {
-  getApproveCallData,
-  getSwapTx,
-  handleCheckAllowance,
-  handleDexSwap,
-} from "@/protocols/1inch/swap";
-import { type SendTransactionParameters } from "@wagmi/core";
-import { toBigInt } from "ethers";
 
 
 async function translateText(
@@ -297,105 +289,8 @@ export default function MultiChainAITrading() {
     }
   };
 
-  // const handleApproveToken = async ({
-  //   chainId,
-  //   approveCallData,
-  // }: {
-  //   chainId: number;
-  //   approveCallData: ApproveData;
-  // }) => {
-  //   try {
-  //     const address = "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045";
-  //     const sendTxn: SendTransactionParameters = {
-  //       account: address,
-  //       chainId,
-  //       data: approveCallData.data as `0x${string}`,
-  //       gasPrice: toBigInt(approveCallData.gasPrice),
-  //       to: approveCallData.to,
-  //       value: toBigInt(approveCallData.value),
-  //     };
-  //     console.log("send txn", sendTxn);
-  //     const result = await sendTransaction(wagmiConfig, sendTxn);
-  //     console.log("Result", result);
-  //   } catch (error) {
-  //     console.log("Error in approving TOkens", error);
-  //   }
-  // };
 
-  //TODO: @kamal this is for 1inch swap
-  const handle1inchDex = async ({
-    chainId,
-    sourceTokenAddress,
-    dstTokenAddress,
-    amount,
-    address,
-  }: dexPayload) => {
-    console.log("Called");
 
-    const allowance = await handleCheckAllowance({
-      chainId,
-      sourceTokenAddress,
-      walletAddress: address,
-    });
-
-    console.log("Allowance", allowance);
-
-    if (allowance === "0") {
-      const approveCallData = await getApproveCallData({
-        chainId,
-        sourceTokenAddress,
-        amount,
-      });
-      console.log("Approve call data", approveCallData);
-
-      if (approveCallData) {
-        const sendTxn: SendTransactionParameters = {
-          account: address,
-          chainId,
-          data: approveCallData.data as `0x${string}`,
-          gasPrice: toBigInt(approveCallData.gasPrice),
-          to: approveCallData.to,
-          value: toBigInt(approveCallData.value),
-        };
-        console.log("send txn", sendTxn);
-        const result = await sendTransaction(wagmiConfig, sendTxn);
-        console.log("Result", result);
-      }
-    }
-
-    await handleDexSwap({
-      chainId,
-      sourceTokenAddress,
-      dstTokenAddress,
-      amount,
-      address,
-    });
-
-    const tx = await getSwapTx({
-      chainId,
-      sourceTokenAddress,
-      dstTokenAddress,
-      amount,
-      address,
-    });
-
-    try {
-      const sendTxn: SendTransactionParameters = {
-        account: tx.from,
-        chainId,
-        data: tx.data,
-        gas: toBigInt(tx.gas.toString()),
-        gasPrice: toBigInt(tx.gasPrice),
-        to: tx.to,
-        value: toBigInt(tx.value),
-      };
-      console.log("Sned txn", sendTxn);
-      const result = await sendTransaction(wagmiConfig, sendTxn);
-      console.log("Result", result);
-    } catch (error) {
-      console.log("Error in sendTxn", error);
-    }
-  };
 
   return (
     <>
