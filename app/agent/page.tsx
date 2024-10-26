@@ -20,19 +20,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useActiveAccount , useActiveWallet } from "thirdweb/react";
+import { useActiveAccount, useActiveWallet } from "thirdweb/react";
 import brian from "@/lib/brian";
-import { sendAndConfirmTransaction } from "thirdweb";
-import { ChainId, executeRoute, getRoutes } from "@lifi/sdk";
+import { executeRoute, getRoutes } from "@lifi/sdk";
 import { SwapPayload } from "@/types/trade";
 import {
-  findChainIdByName,
+  getChainIdByChainName,
+  getTokenBasedOnChain,
   processAmount,
-  TokenManagement,
 } from "@/constants/TokenDetails";
 import { ErrorToast } from "@/lib/error";
 import { useSendAndConfirmTransaction } from "thirdweb/react";
 import { generateQuote, generateTransaction } from "@/config/odosTransaction";
+import { BeatLoader } from "react-spinners";
+import { mainnet } from "thirdweb/chains";
 
 async function translateText(
   text: string,
@@ -58,10 +59,10 @@ export default function MultiChainAITrading() {
   const [protocol, setProtocol] = useState("askme");
   const recognitionRef = useRef<SpeechRecognitionResult | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [chainId, setChainId] = useState<number | undefined>(undefined);
+
+  const [isLoading, setIsLoading] = useState(false);
 
   // odos swap
-
   const [quotePathId, setQuotePathId] = useState("");
   const totalTime = 60;
   const [timeLeft, setTimeLeft] = useState(60);
@@ -88,13 +89,13 @@ export default function MultiChainAITrading() {
   }, [isActive]);
 
   // const { address } = useWeb3ModalAccount()
-  const activeAccount= useActiveAccount();
+  const activeAccount = useActiveAccount();
   const wallet = useActiveWallet();
 
-  const address = activeAccount?.address;
+  const userWalletAddress = activeAccount?.address;
 
   const { mutate: sendAndConfirmTx, data: transactionReceipt } =
-  useSendAndConfirmTransaction();
+    useSendAndConfirmTransaction();
 
   useEffect(() => {
     const SpeechRecognition =
@@ -114,7 +115,6 @@ export default function MultiChainAITrading() {
       recognitionRef.current?.stop();
     };
   }, []);
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -184,123 +184,128 @@ export default function MultiChainAITrading() {
     const message = messages[messageIndex];
     if (!message.canExecute) return;
 
-    if (!address) {
+    if (!userWalletAddress) {
       alert("Please connect your wallet");
       return;
     }
 
+    setIsLoading(true);
     const result = await brian.extract({
       prompt: message.content,
     });
 
-  
-
     console.log("executing txn with result", result);
 
-    if (result && result.completion[0].chain == "rootstock") {
-      //TODO: @kamal call it here with the payload defined on line 256
-      // handleSwap({})
-      const { action, amount, chain, token1, token2 } = result.completion[0];
-      const sourceChain = findChainIdByName(token1);
-      const destinationChain = findChainIdByName(token2);
+    if (!result) {
+      setIsLoading(false);
+      ErrorToast("Something went wrong during execution.");
+      return;
+    }
 
-      const parsedAmount = processAmount(amount, sourceChain?.decimals);
+    const { action, amount, token1, token2, chain, address } =
+      result.completion[0];
 
-      if (!sourceChain) {
-        ErrorToast("From Chain is missing");
-        return;
-      }
-      if (!destinationChain) {
-        ErrorToast("Destination Chain is missing");
-        return;
-      }
-      if (!parsedAmount) {
-        ErrorToast("Please enter amount");
-        return;
-      }
+    if (!token1 || !token2 || !action || !amount) {
+      setIsLoading(false);
+      ErrorToast("Something went wrong during execution.");
+      return;
+    }
 
-      console.log(
-        "Parsed Amount >>>",
-        parsedAmount,
-        sourceChain,
-        destinationChain
-      );
+    const currentChainId = await wallet?.getChain();
 
+    const fetchedChain = getChainIdByChainName(chain);
+
+    const sourceChainToken = getTokenBasedOnChain({
+      chainId: fetchedChain.id,
+      tokenName: token1.toLowerCase(),
+    });
+
+    const destinationChainToken = getTokenBasedOnChain({
+      chainId: fetchedChain.id,
+      tokenName: token2.toLowerCase(),
+    });
+
+    const parsedAmount = processAmount(amount, sourceChainToken?.decimals);
+
+    if (currentChainId && currentChainId.id !== fetchedChain.id) {
+      await wallet?.switchChain(fetchedChain);
+    }
+
+    if (!sourceChainToken || !destinationChainToken || !parsedAmount) {
+      ErrorToast("Missing Data While Executing Transaction. Please try again");
+      return;
+    }
+
+    if (protocol === "odos") {
       if (action === "swap") {
-        await handleSwap({
-          fromChainId: sourceChain.chainId,
-          toChainId: destinationChain.chainId,
-          fromTokenAddress: sourceChain.address,
-          toTokenAddress: destinationChain.address,
-          amount: parsedAmount,
-        });
-      }
-    } else if (result && protocol === "odos") {
-      try {
-        const { action, amount, token1, token2 } = result.completion[0];
-        
-        if (!address) {
-          ErrorToast("Please connect your wallet first");
-          return;
-        }
-    
-        if (action === "swap") {
-          // Generate quote first
+        try {
           const quoteFetched = await generateQuote({
-            chainId: "1", // Assuming Ethereum mainnet, adjust if needed
-            userAddr: address,
-            inputTokenAddress: token1.address,
-            outputTokenAddress: token2.address,
-            amount: processAmount(amount, token1.decimals).toString(),
+            chainId: fetchedChain.id.toString(),
+            userAddr: userWalletAddress,
+            inputTokenAddress: sourceChainToken?.address as string,
+            outputTokenAddress: destinationChainToken?.address as string,
+            amount: parsedAmount as string,
           });
-    
-          console.log("ODOS Quote fetched:", quoteFetched);
+
+          console.log("quoteFetched", quoteFetched);
+
           const { pathId } = quoteFetched;
-    
+
           if (!pathId) {
             ErrorToast("Failed to get quote from ODOS");
             return;
           }
-    
+
           // Generate and execute transaction
           const transactionQuote = await generateTransaction({
-            userAddr: address,
+            userAddr: userWalletAddress,
             pathId: pathId,
           });
-    
+
           console.log("ODOS Transaction quote:", transactionQuote);
           const { transaction } = transactionQuote;
-    
+
           const txResult = await activeAccount.sendTransaction(transaction);
           console.log("ODOS Transaction result:", txResult);
-    
+
           // Add success message to chat
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `Successfully executed ODOS swap transaction. Hash: ${txResult.hash}`,
+              content: `Successfully executed ODOS swap transaction. Hash: ${txResult.transactionHash}`,
             },
           ]);
+          setIsLoading(false);
+        } catch (error) {
+          setIsLoading(false);
+          console.log("Error in fetching and executing swap", error);
+          ErrorToast("Failed to execute swap transaction");
         }
-      } catch (error: any) {
-        console.error("ODOS Swap Error:", error);
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: `Error executing ODOS swap: ${error.message}`,
-          },
-        ]);
       }
-    } else if (result && address) {
+    } else if (result.completion[0].chain == "rootstock") {
+      console.log(
+        "Parsed Amount >>>",
+        parsedAmount,
+        sourceChainToken,
+        destinationChainToken
+      );
 
-      const chainId = await wallet?.getChain();
-      console.log("Executing Transaction >>", result, address, chainId);
+      if (action === "swap") {
+        await handleSwap({
+          fromChainId: Number(sourceChainToken.chainId),
+          toChainId: Number(destinationChainToken.chainId),
+          fromTokenAddress: sourceChainToken.address,
+          toTokenAddress: destinationChainToken.address,
+          amount: parsedAmount,
+        });
+      }
+    } else if (result && userWalletAddress) {
+      console.log("Executing Transaction >>", result, address);
       const transactionResult = await brian.transact({
         ...result,
-        address: address,
-        chainId: chainId ? `${chainId}` : '1',
+        address: userWalletAddress,
+        chainId: chain ? `${fetchedChain.id}` : `${mainnet.id}`,
       });
 
       console.log("Transaction Result:", transactionResult);
@@ -321,7 +326,7 @@ export default function MultiChainAITrading() {
           console.log("Tx >>", tx);
 
           try {
-            const hash = await sendAndConfirmTx( tx);
+            const hash = await sendAndConfirmTx(tx);
             console.log("Transaction Hash >>", hash);
             setMessages((prev) => [
               ...prev,
@@ -345,8 +350,6 @@ export default function MultiChainAITrading() {
       }
     }
   };
-
-  console.log("address", address);
 
   // @kamal call this func according to the payloads LIFI
   const handleSwap = async ({
@@ -383,50 +386,8 @@ export default function MultiChainAITrading() {
     }
   };
 
-
-  const handleOdosSwap = async () => {
-    if (!address) return;
-    const quoteFetched = await generateQuote({
-      chainId: "1",
-      userAddr: address,
-      inputTokenAddress: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      outputTokenAddress: "0x6c3ea9036406852006290770bedfcaba0e23a0e8",
-      amount: "100000000",
-    });
-
-    console.log("quoteFetched", quoteFetched);
-
-    const { pathId } = quoteFetched;
-    setQuotePathId(pathId);
-    setIsActive(true);
-    setTimeLeft(totalTime);
-  };
-
-  const executeOdosSwap = async () => {
-    if (!address || !quotePathId) return;
-
-    try {
-      const transactionQuote = await generateTransaction({
-        userAddr: address,
-        pathId: quotePathId,
-      });
-
-      console.log("Transaction", transactionQuote);
-
-      const { transaction } = transactionQuote;
-
-      const txResult = await activeAccount.sendTransaction(transaction);
-      console.log("Tx Result", txResult);
-    } catch (error) {
-      console.log("Error in executing", error);
-      setQuotePathId("");
-      setIsActive(false);
-      setTimeLeft(totalTime);
-    }
-  };
-
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
@@ -523,13 +484,9 @@ export default function MultiChainAITrading() {
               size="icon"
               variant={isListening ? "destructive" : "secondary"}
               onClick={toggleListening}
-              className="w-14 h-14 flex-shrink-0"
+              className="flex-shrink-0"
             >
-              {isListening ? (
-                <MicOff className="h-7 w-7" />
-              ) : (
-                <Mic className="h-7 w-7" />
-              )}
+              {isListening ? <MicOff className="" /> : <Mic className="" />}
               <span className="sr-only">
                 {isListening ? "Stop listening" : "Start listening"}
               </span>
@@ -560,30 +517,25 @@ export default function MultiChainAITrading() {
               size="icon"
               variant="outline"
               onClick={() => setIsEditing(!isEditing)}
-              className="w-14 h-14 flex-shrink-0"
+              className="flex-shrink-0"
             >
-              <PenSquare className="h-7 w-7" />
+              <PenSquare className="" />
               <span className="sr-only">Toggle edit mode</span>
             </Button>
-            <Button
-              size="icon"
-              onClick={handleSend}
-              className="w-14 h-14 flex-shrink-0"
-            >
-              <Send className="h-7 w-7" />
-              <span className="sr-only">Send message</span>
-            </Button>
+            {isLoading ? (
+              <BeatLoader />
+            ) : (
+              <Button
+                size="icon"
+                onClick={handleSend}
+                className="flex-shrink-0"
+              >
+                <Send className="" />
+              </Button>
+            )}
           </div>
         </CardFooter>
       </Card>
-
-      <Button onClick={handleOdosSwap}>Odos swap</Button>
-      {quotePathId && (
-        <>
-          <div className="timer-text">{timeLeft} seconds left</div>
-          <Button onClick={executeOdosSwap}>Execute Swap</Button>
-        </>
-      )}
     </>
   );
 }
