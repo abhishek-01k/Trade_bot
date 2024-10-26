@@ -8,6 +8,7 @@ import {
   Inter as FontSans,
 } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ThirdwebProvider } from "thirdweb/react";
 
 export const fontSans = FontSans({
   subsets: ["latin"],
@@ -39,11 +40,13 @@ export default function RootLayout({
         )}
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <ThirdwebProvider>
           <div className="relative flex min-h-screen flex-col">
             <SiteHeader />
             <div className="flex-1">{children}</div>
           </div>
           <TailwindIndicator />
+          </ThirdwebProvider>
         </ThemeProvider>
       </body>
     </html>
