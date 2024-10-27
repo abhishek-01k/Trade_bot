@@ -491,7 +491,7 @@ export default function MultiChainAITrading() {
           method: 'GET',
           headers: {
             accept: 'application/json',
-            apiKey: 'demokey'
+            apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
           }
         });
         const data = await response.json();
@@ -531,7 +531,7 @@ View in Inspector: [${inspectorUrl}](${inspectorUrl})
           method: 'GET',
           headers: {
             accept: 'application/json',
-            apiKey: 'demokey'
+            apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
           }
         });
         const data = await response.json();
