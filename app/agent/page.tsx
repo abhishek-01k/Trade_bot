@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Mic, MicOff, PenSquare, Send, Play } from "lucide-react";
+import { Mic, MicOff, PenSquare, Send, Play, Info } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -136,6 +136,41 @@ export default function MultiChainAITrading() {
 
   const handleSend = async () => {
     if (currentMessage.trim()) {
+      // Checking ODOS chains request first
+      if (currentMessage === "Show me the supported chains for ODOS") {
+        try {
+          const response = await fetch('https://api.odos.xyz/info/chains');
+          const data = await response.json();
+          
+          // Format the chain IDs in a readable way
+          const chainList = data.chains.join(', ');
+          
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "user",
+              content: currentMessage,
+            },
+            {
+              role: "assistant",
+              content: `ODOS supports the following chain IDs: ${chainList}`,
+            },
+          ]);
+          setCurrentMessage("");
+          return;
+        } catch (error) {
+          console.error("Error fetching ODOS chains:", error);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: "Sorry, I couldn't fetch the supported chains at the moment.",
+            },
+          ]);
+          return;
+        }
+      }
+
       let translatedMessage = currentMessage;
       let originalMessage = undefined;
 
@@ -144,6 +179,7 @@ export default function MultiChainAITrading() {
         originalMessage = currentMessage;
       }
 
+      // Only add the user message here if it's not the ODOS chains request
       setMessages((prev) => [
         ...prev,
         {
@@ -163,20 +199,22 @@ export default function MultiChainAITrading() {
       console.log("Brian Result:", result);
 
       // Simulate AI response
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: `I've received your command: "${translatedMessage}". ${
-              result
-                ? "I can execute this transaction for you."
-                : "I couldn't process this as a transaction."
-            }`,
-            canExecute: !!result,
-          },
-        ]);
-      }, 1000);
+      if(result) {
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `I've received your command: "${translatedMessage}". ${
+                result
+                  ? "I can execute this transaction for you."
+                  : "I couldn't process this as a transaction."
+              }`,
+              canExecute: !!result,
+            },
+          ]);
+        }, 1000);
+      }
     }
   };
 
@@ -393,6 +431,10 @@ export default function MultiChainAITrading() {
     }
   };
 
+  const handleSupportedChains = () => {
+    setCurrentMessage("Show me the supported chains for ODOS");
+  };
+
   return (
     <>
       <Card className="w-full max-w-6xl mx-auto h-[700px] flex flex-col p-6">
@@ -480,6 +522,16 @@ export default function MultiChainAITrading() {
         </CardContent>
         <CardFooter className="px-6 py-6">
           <div className="flex w-full items-center space-x-4">
+            {protocol === "odos" && (
+              <Button
+                variant="outline"
+                onClick={handleSupportedChains}
+                className="flex-shrink-0"
+              >
+                <Info className="mr-2 h-4 w-4" />
+                Supported Chains
+              </Button>
+            )}
             <Button
               size="icon"
               variant={isListening ? "destructive" : "secondary"}
