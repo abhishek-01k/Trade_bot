@@ -34,6 +34,7 @@ import { useSendAndConfirmTransaction } from "thirdweb/react";
 import { generateQuote, generateTransaction } from "@/config/odosTransaction";
 import { BeatLoader } from "react-spinners";
 import { mainnet } from "thirdweb/chains";
+import { novesChains } from "@/config/noveschains";
 
 async function translateText(
   text: string,
@@ -67,6 +68,12 @@ export default function MultiChainAITrading() {
   const totalTime = 60;
   const [timeLeft, setTimeLeft] = useState(60);
   const [isActive, setIsActive] = useState(false);
+
+  // Add these new state variables at the beginning of your component
+  const [txnOption, setTxnOption] = useState<"history" | "hash" | null>(null);
+  const [selectedChain, setSelectedChain] = useState("");
+  const [txHash, setTxHash] = useState("");
+  const [historicalAddress, setHistoricalAddress] = useState("");
 
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null; // Declare timer variable
@@ -398,8 +405,8 @@ export default function MultiChainAITrading() {
     amount,
   }: SwapPayload) => {
     try {
-      if (!address) {
-        console.log();
+      if (!userWalletAddress) {
+        console.log("no wallet address");
       }
 
       const result = await getRoutes({
@@ -408,7 +415,7 @@ export default function MultiChainAITrading() {
         fromTokenAddress: fromTokenAddress, // USDC on Arbitrum
         toTokenAddress: toTokenAddress, // DAI on Optimism
         fromAmount: amount, // amount in string with decimals included
-        fromAddress: address,
+        fromAddress: userWalletAddress,
       });
 
       const route = result.routes[0];
@@ -433,6 +440,132 @@ export default function MultiChainAITrading() {
 
   const handleSupportedChains = () => {
     setCurrentMessage("Show me the supported chains for ODOS");
+  };
+
+  // @kamal txn options
+  const TxnOptionsSelect = () => {
+    return (
+      <div className="flex flex-col space-y-4 w-full">
+        <Select value={txnOption || ""} onValueChange={(value: "history" | "hash") => setTxnOption(value)}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select Transaction Option" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="history">See Wallet History</SelectItem>
+            <SelectItem value="hash">Get Info by Transaction Hash</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {txnOption && (
+          <>
+          <Select value={selectedChain} onValueChange={(chainName) => setSelectedChain(chainName)}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select Chain" />
+            </SelectTrigger>
+            <SelectContent>
+              {novesChains.map((chain) => (
+                <SelectItem key={chain.evmChainId} value={chain.name}>
+                  {chain.name.toUpperCase()}
+                </SelectItem>
+              ))}
+              </SelectContent>
+            </Select>
+            <Input value={historicalAddress} onChange={(e) => setHistoricalAddress(e.target.value)} placeholder="Enter Address" className="w-full" />
+          </>
+        )}
+
+        {txnOption === "hash" && (
+          <Input
+            value={txHash}
+            onChange={(e) => setTxHash(e.target.value)}
+            placeholder="Enter Transaction Hash"
+            className="w-full"
+          />
+        )}
+      </div>
+    );
+  };
+
+  // Add this new function to handle transaction queries
+  const handleTxnQuery = async () => {
+    setIsLoading(true);
+    try {
+      console.log(process.env.NEXT_PUBLIC_NOVES_API_KEY,"noves api key");
+      if (txnOption === "history") {
+        const response = await fetch(`https://translate.noves.fi/evm/${selectedChain}/history/${historicalAddress}`, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
+          }
+        });
+        const data = await response.json();
+        
+        // Process each transaction
+        for (const tx of data.items) {
+          const txDetails = await fetch(
+            `https://translate.noves.fi/evm/${selectedChain}/raw/tx/${tx.transactionHash}`,
+            {
+              method: 'GET',
+              headers: {
+                accept: 'application/json',
+                apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
+              }
+            }
+          );
+          const txData = await txDetails.json();
+          
+          const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${tx.transactionHash}?key=wMxRXQ`;
+          
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: `
+Transaction Details:
+- Hash: ${tx.transactionHash}
+- Block: ${tx.blockNumber}
+- Timestamp: ${new Date(tx.timestamp * 1000).toLocaleString()}
+- Type: ${txData.classificationData?.type || 'Unknown'}
+- Description: ${txData.classificationData?.description || 'N/A'}
+
+View in Inspector: [${inspectorUrl}](${inspectorUrl})
+            `.trim()
+          }]);
+        }
+      } else if (txnOption === "hash") {
+        const response = await fetch(`https://translate.noves.fi/evm/${selectedChain}/tx/${txHash}`, {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
+          }
+        });
+        const data = await response.json();
+        
+        const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${txHash}?key=wMxRXQ`;
+        
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: `
+Transaction Details:
+- Type: ${data.classificationData?.type || 'Unknown'}
+- Description: ${data.classificationData?.description || 'N/A'}
+- From: ${data.rawTransactionData?.fromAddress}
+- To: ${data.rawTransactionData?.toAddress}
+- Gas Used: ${data.rawTransactionData?.gasUsed}
+- Timestamp: ${new Date(data.rawTransactionData?.timestamp * 1000).toLocaleString()}
+
+View in Inspector: [${inspectorUrl}](${inspectorUrl})
+          `.trim()
+        }]);
+      }
+    } catch (error) {
+      console.error('Error fetching transaction data:', error);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "Sorry, there was an error fetching the transaction data."
+      }]);
+    }
+    setIsLoading(false);
   };
 
   return (
@@ -468,6 +601,9 @@ export default function MultiChainAITrading() {
           </Select>
         </CardHeader>
         <CardContent className="flex-grow overflow-auto px-6 py-6">
+          {protocol === "txn" && !messages.length && (
+            <TxnOptionsSelect />
+          )}
           {messages.map((message, index) => (
             <div
               key={index}
@@ -574,6 +710,15 @@ export default function MultiChainAITrading() {
               <PenSquare className="" />
               <span className="sr-only">Toggle edit mode</span>
             </Button>
+            {protocol === "txn" && txnOption && selectedChain && (txnOption === "history" || txHash) && (
+              <Button
+                onClick={handleTxnQuery}
+                disabled={isLoading}
+                className="flex-shrink-0"
+              >
+                {isLoading ? <BeatLoader size={8} /> : "Get Transaction Info"}
+              </Button>
+            )}
             {isLoading ? (
               <BeatLoader />
             ) : (
