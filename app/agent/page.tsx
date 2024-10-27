@@ -73,6 +73,7 @@ export default function MultiChainAITrading() {
   const [txnOption, setTxnOption] = useState<"history" | "hash" | null>(null);
   const [selectedChain, setSelectedChain] = useState("");
   const [txHash, setTxHash] = useState("");
+  const [historicalAddress, setHistoricalAddress] = useState("");
 
   useEffect(() => {
     let timer: NodeJS.Timeout | null = null; // Declare timer variable
@@ -404,8 +405,8 @@ export default function MultiChainAITrading() {
     amount,
   }: SwapPayload) => {
     try {
-      if (!address) {
-        console.log();
+      if (!userWalletAddress) {
+        console.log("no wallet address");
       }
 
       const result = await getRoutes({
@@ -414,7 +415,7 @@ export default function MultiChainAITrading() {
         fromTokenAddress: fromTokenAddress, // USDC on Arbitrum
         toTokenAddress: toTokenAddress, // DAI on Optimism
         fromAmount: amount, // amount in string with decimals included
-        fromAddress: address,
+        fromAddress: userWalletAddress,
       });
 
       const route = result.routes[0];
@@ -456,6 +457,7 @@ export default function MultiChainAITrading() {
         </Select>
 
         {txnOption && (
+          <>
           <Select value={selectedChain} onValueChange={(chainName) => setSelectedChain(chainName)}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select Chain" />
@@ -466,8 +468,10 @@ export default function MultiChainAITrading() {
                   {chain.name.toUpperCase()}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
+              </SelectContent>
+            </Select>
+            <Input value={historicalAddress} onChange={(e) => setHistoricalAddress(e.target.value)} placeholder="Enter Address" className="w-full" />
+          </>
         )}
 
         {txnOption === "hash" && (
@@ -486,8 +490,9 @@ export default function MultiChainAITrading() {
   const handleTxnQuery = async () => {
     setIsLoading(true);
     try {
+      console.log(process.env.NEXT_PUBLIC_NOVES_API_KEY,"noves api key");
       if (txnOption === "history") {
-        const response = await fetch('https://translate.noves.fi/evm//history/', {
+        const response = await fetch(`https://translate.noves.fi/evm/${selectedChain}/history/${historicalAddress}`, {
           method: 'GET',
           headers: {
             accept: 'application/json',
