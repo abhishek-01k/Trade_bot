@@ -45,12 +45,14 @@ async function translateText(
   return `Translated: ${text}`;
 }
 
+type MessageContent = string | { __html: string };
+
 export default function MultiChainAITrading() {
   const [isListening, setIsListening] = useState(false);
   const [messages, setMessages] = useState<
     Array<{
       role: "user" | "assistant";
-      content: string;
+      content: MessageContent;
       originalContent?: string;
       canExecute?: boolean;
     }>
@@ -529,25 +531,44 @@ export default function MultiChainAITrading() {
             }
           );
           const txData = await txDetails.json();
-
-          const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${tx.transactionHash}?key=wMxRXQ`;
-
-          setMessages((prev) => [
-            ...prev,
+          // Get generated key for inspector URL
+          const keyResponse = await fetch(
+            `https://extension-gateway.noves.fi/evm/${selectedChain}/generateInspectorLink/${tx.transactionHash}`,
             {
-              role: "assistant",
-              content: `
-Transaction Details:
-- Hash: ${tx.transactionHash}
-- Block: ${tx.blockNumber}
-- Timestamp: ${new Date(tx.timestamp * 1000).toLocaleString()}
-- Type: ${txData.classificationData?.type || "Unknown"}
-- Description: ${txData.classificationData?.description || "N/A"}
+              method: 'GET',
+              headers: {
+                accept: '*/*',
+                apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
+              }
+            }
+          );
 
-View in Inspector: [${inspectorUrl}](${inspectorUrl})
-            `.trim(),
-            },
-          ]);
+          console.log(keyResponse, "key response" , keyResponse.text());
+          const generatedKey = await keyResponse.text();
+
+          const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${tx.transactionHash}?key=${generatedKey}`;
+          
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: {
+              __html: `
+                <div>
+                  <p><strong>Transaction Details:</strong></p>
+                  <p>• Hash: ${tx.transactionHash}</p>
+                  <p>• Block: ${tx.blockNumber}</p>
+                  <p>• Timestamp: ${new Date(tx.timestamp * 1000).toLocaleString()}</p>
+                  <p>• Type: ${txData.classificationData?.type || 'Unknown'}</p>
+                  <p>• Description: ${txData.classificationData?.description || 'N/A'}</p>
+                  <p>
+                    <strong>View in Inspector:</strong> 
+                    <a href="${inspectorUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-600 underline">
+                      ${inspectorUrl}
+                    </a>
+                  </p>
+                </div>
+              `.trim()
+            }
+          }]);
         }
       } else if (txnOption === "hash") {
         const response = await fetch(
@@ -561,28 +582,45 @@ View in Inspector: [${inspectorUrl}](${inspectorUrl})
           }
         );
         const data = await response.json();
-
-        const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${txHash}?key=wMxRXQ`;
-
-        setMessages((prev) => [
-          ...prev,
+        
+        const keyResponse = await fetch(
+          `https://extension-gateway.noves.fi/evm/${selectedChain}/generateInspectorLink/${txHash}`,
           {
-            role: "assistant",
-            content: `
-Transaction Details:
-- Type: ${data.classificationData?.type || "Unknown"}
-- Description: ${data.classificationData?.description || "N/A"}
-- From: ${data.rawTransactionData?.fromAddress}
-- To: ${data.rawTransactionData?.toAddress}
-- Gas Used: ${data.rawTransactionData?.gasUsed}
-- Timestamp: ${new Date(
-              data.rawTransactionData?.timestamp * 1000
-            ).toLocaleString()}
+            method: 'GET',
+            headers: {
+              accept: '*/*',
+              apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
+            }
+          }
+        );
 
-View in Inspector: [${inspectorUrl}](${inspectorUrl})
-          `.trim(),
-          },
-        ]);
+        const a = await keyResponse.text();
+        console.log(a, "a");
+
+        const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${txHash}?key=${a}`;
+        
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: {
+            __html: `
+              <div>
+                <p><strong>Transaction Details:</strong></p>
+                <p>• Type: ${data.classificationData?.type || 'Unknown'}</p>
+                <p>• Description: ${data.classificationData?.description || 'N/A'}</p>
+                <p>• From: ${data.rawTransactionData?.fromAddress}</p>
+                <p>• To: ${data.rawTransactionData?.toAddress}</p>
+                <p>• Gas Used: ${data.rawTransactionData?.gasUsed}</p>
+                <p>• Timestamp: ${new Date(data.rawTransactionData?.timestamp * 1000).toLocaleString()}</p>
+                <p>
+                  <strong>View in Inspector:</strong> 
+                  <a href="${inspectorUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-600 underline">
+                    ${inspectorUrl}
+                  </a>
+                </p>
+              </div>
+            `.trim()
+          }
+        }]);
       }
     } catch (error) {
       console.error("Error fetching transaction data:", error);
@@ -767,7 +805,14 @@ View in Inspector: [${inspectorUrl}](${inspectorUrl})
                     : "bg-muted"
                     }`}
                 >
-                  <p className="text-base">{message.content}</p>
+                  {typeof message.content === 'string' ? (
+                    <p className="text-base">{message.content}</p>
+                  ) : (
+                    <div 
+                      className="text-base"
+                      dangerouslySetInnerHTML={message.content}
+                    />
+                  )}
                   {message.originalContent && (
                     <p className="text-sm mt-3 text-muted-foreground">
                       Original: {message.originalContent}
