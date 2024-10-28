@@ -1,5 +1,5 @@
 "use client";
-
+import { ethers } from "ethers";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Mic, MicOff, PenSquare, Send, Play, Info } from "lucide-react";
+import { Mic, MicOff, PenSquare, Send, Play, Info, Timer, RotateCcw, Languages, Building2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -35,6 +35,7 @@ import { generateQuote, generateTransaction } from "@/config/odosTransaction";
 import { BeatLoader } from "react-spinners";
 import { mainnet } from "thirdweb/chains";
 import { novesChains } from "@/config/noveschains";
+import { Skeleton } from "@/components/ui/skeleton";
 
 async function translateText(
   text: string,
@@ -146,12 +147,12 @@ export default function MultiChainAITrading() {
       // Checking ODOS chains request first
       if (currentMessage === "Show me the supported chains for ODOS") {
         try {
-          const response = await fetch('https://api.odos.xyz/info/chains');
+          const response = await fetch("https://api.odos.xyz/info/chains");
           const data = await response.json();
-          
+
           // Format the chain IDs in a readable way
-          const chainList = data.chains.join(', ');
-          
+          const chainList = data.chains.join(", ");
+
           setMessages((prev) => [
             ...prev,
             {
@@ -171,7 +172,8 @@ export default function MultiChainAITrading() {
             ...prev,
             {
               role: "assistant",
-              content: "Sorry, I couldn't fetch the supported chains at the moment.",
+              content:
+                "Sorry, I couldn't fetch the supported chains at the moment.",
             },
           ]);
           return;
@@ -206,17 +208,16 @@ export default function MultiChainAITrading() {
       console.log("Brian Result:", result);
 
       // Simulate AI response
-      if(result) {
+      if (result) {
         setTimeout(() => {
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: `I've received your command: "${translatedMessage}". ${
-                result
-                  ? "I can execute this transaction for you."
-                  : "I couldn't process this as a transaction."
-              }`,
+              content: `I've received your command: "${translatedMessage}". ${result
+                ? "I can execute this transaction for you."
+                : "I couldn't process this as a transaction."
+                }`,
               canExecute: !!result,
             },
           ]);
@@ -446,7 +447,10 @@ export default function MultiChainAITrading() {
   const TxnOptionsSelect = () => {
     return (
       <div className="flex flex-col space-y-4 w-full">
-        <Select value={txnOption || ""} onValueChange={(value: "history" | "hash") => setTxnOption(value)}>
+        <Select
+          value={txnOption || ""}
+          onValueChange={(value: "history" | "hash") => setTxnOption(value)}
+        >
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select Transaction Option" />
           </SelectTrigger>
@@ -458,19 +462,27 @@ export default function MultiChainAITrading() {
 
         {txnOption && (
           <>
-          <Select value={selectedChain} onValueChange={(chainName) => setSelectedChain(chainName)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select Chain" />
-            </SelectTrigger>
-            <SelectContent>
-              {novesChains.map((chain) => (
-                <SelectItem key={chain.evmChainId} value={chain.name}>
-                  {chain.name.toUpperCase()}
-                </SelectItem>
-              ))}
+            <Select
+              value={selectedChain}
+              onValueChange={(chainName) => setSelectedChain(chainName)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select Chain" />
+              </SelectTrigger>
+              <SelectContent>
+                {novesChains.map((chain) => (
+                  <SelectItem key={chain.evmChainId} value={chain.name}>
+                    {chain.name.toUpperCase()}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Input value={historicalAddress} onChange={(e) => setHistoricalAddress(e.target.value)} placeholder="Enter Address" className="w-full" />
+            <Input
+              value={historicalAddress}
+              onChange={(e) => setHistoricalAddress(e.target.value)}
+              placeholder="Enter Address"
+              className="w-full"
+            />
           </>
         )}
 
@@ -490,131 +502,253 @@ export default function MultiChainAITrading() {
   const handleTxnQuery = async () => {
     setIsLoading(true);
     try {
-      console.log(process.env.NEXT_PUBLIC_NOVES_API_KEY,"noves api key");
+      console.log(process.env.NEXT_PUBLIC_NOVES_API_KEY, "noves api key");
       if (txnOption === "history") {
-        const response = await fetch(`https://translate.noves.fi/evm/${selectedChain}/history/${historicalAddress}`, {
-          method: 'GET',
-          headers: {
-            accept: 'application/json',
-            apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
+        const response = await fetch(
+          `https://translate.noves.fi/evm/${selectedChain}/history/${historicalAddress}`,
+          {
+            method: "GET",
+            headers: {
+              accept: "application/json",
+              apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string,
+            },
           }
-        });
+        );
         const data = await response.json();
-        
+
         // Process each transaction
         for (const tx of data.items) {
           const txDetails = await fetch(
             `https://translate.noves.fi/evm/${selectedChain}/raw/tx/${tx.transactionHash}`,
             {
-              method: 'GET',
+              method: "GET",
               headers: {
-                accept: 'application/json',
-                apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
-              }
+                accept: "application/json",
+                apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string,
+              },
             }
           );
           const txData = await txDetails.json();
-          
+
           const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${tx.transactionHash}?key=wMxRXQ`;
-          
-          setMessages(prev => [...prev, {
-            role: "assistant",
-            content: `
+
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: `
 Transaction Details:
 - Hash: ${tx.transactionHash}
 - Block: ${tx.blockNumber}
 - Timestamp: ${new Date(tx.timestamp * 1000).toLocaleString()}
-- Type: ${txData.classificationData?.type || 'Unknown'}
-- Description: ${txData.classificationData?.description || 'N/A'}
+- Type: ${txData.classificationData?.type || "Unknown"}
+- Description: ${txData.classificationData?.description || "N/A"}
 
 View in Inspector: [${inspectorUrl}](${inspectorUrl})
-            `.trim()
-          }]);
+            `.trim(),
+            },
+          ]);
         }
       } else if (txnOption === "hash") {
-        const response = await fetch(`https://translate.noves.fi/evm/${selectedChain}/tx/${txHash}`, {
-          method: 'GET',
-          headers: {
-            accept: 'application/json',
-            apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string
+        const response = await fetch(
+          `https://translate.noves.fi/evm/${selectedChain}/tx/${txHash}`,
+          {
+            method: "GET",
+            headers: {
+              accept: "application/json",
+              apiKey: process.env.NEXT_PUBLIC_NOVES_API_KEY as string,
+            },
           }
-        });
+        );
         const data = await response.json();
-        
+
         const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${txHash}?key=wMxRXQ`;
-        
-        setMessages(prev => [...prev, {
-          role: "assistant",
-          content: `
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `
 Transaction Details:
-- Type: ${data.classificationData?.type || 'Unknown'}
-- Description: ${data.classificationData?.description || 'N/A'}
+- Type: ${data.classificationData?.type || "Unknown"}
+- Description: ${data.classificationData?.description || "N/A"}
 - From: ${data.rawTransactionData?.fromAddress}
 - To: ${data.rawTransactionData?.toAddress}
 - Gas Used: ${data.rawTransactionData?.gasUsed}
-- Timestamp: ${new Date(data.rawTransactionData?.timestamp * 1000).toLocaleString()}
+- Timestamp: ${new Date(
+              data.rawTransactionData?.timestamp * 1000
+            ).toLocaleString()}
 
 View in Inspector: [${inspectorUrl}](${inspectorUrl})
-          `.trim()
-        }]);
+          `.trim(),
+          },
+        ]);
       }
     } catch (error) {
-      console.error('Error fetching transaction data:', error);
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: "Sorry, there was an error fetching the transaction data."
-      }]);
+      console.error("Error fetching transaction data:", error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Sorry, there was an error fetching the transaction data.",
+        },
+      ]);
     }
     setIsLoading(false);
   };
 
+  const [baseFeePerGas, setBaseFeePerGas] = useState<string>("0");
+  const [timer, setTimer] = useState<number>(60);
+  const [loadingData, setLoadingData] = useState(false);
+
+  const getGasEstimation = async () => {
+
+    try {
+      setLoadingData(true);
+
+      const quicknodewss = process.env.NEXT_PUBLIC_QUICKNODE_WSS || "";
+      
+      const provider = new ethers.WebSocketProvider(
+        quicknodewss
+      );
+
+      console.log("Provider", provider);
+
+      const network = await provider.send("bn_gasPrice", [{ "chainid": 1 }]);
+      console.log("network", network);
+
+      const { blockPrices } = network;
+      const baseFeePerGas = blockPrices[0].baseFeePerGas;
+      setBaseFeePerGas(baseFeePerGas);
+      setTimer(60);
+      setLoadingData(false)
+    } catch (error) {
+      console.log("Error", error);
+      setLoadingData(false)
+
+    }
+  };
+
+  useEffect(() => {
+    getGasEstimation();
+
+    const interval = setInterval(() => {
+      setTimer((prev) => {
+        if (prev <= 1) {
+          getGasEstimation();
+          return 60;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+
+
+
   return (
     <>
       <Card className="w-full max-w-6xl mx-auto h-[700px] flex flex-col p-6">
-        <CardHeader className="flex flex-row items-center justify-between px-6 py-6">
+        <CardHeader className="flex flex-col  px-6 py-6">
           <CardTitle className="text-3xl font-bold">
             Multichain AI Trading
           </CardTitle>
-          <Select value={language} onValueChange={setLanguage}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select Language" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="en">English</SelectItem>
-              <SelectItem value="es">Español</SelectItem>
-              <SelectItem value="fr">Français</SelectItem>
-              <SelectItem value="de">Deutsch</SelectItem>
-              <SelectItem value="it">Italiano</SelectItem>
-              <SelectItem value="pt">Português</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={protocol} onValueChange={setProtocol}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select Protocol" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="odos">ODOS</SelectItem>
-              <SelectItem value="askme">Ask Me</SelectItem>
-              <SelectItem value="txn">Get Info about a txn</SelectItem>
-              <SelectItem value="swap">Swap</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Base Gas Fees
+                </CardTitle>
+
+                <div className="flex flex-row items-center gap-1">
+                  <Timer size={20} />
+                  <span className="text-sm">{timer}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-2">
+                <div className="text-2xl font-bold">{
+                  loadingData ? (
+                    <Skeleton className="h-8 max-w-32" />
+                  ) : (
+                    <>
+                      {baseFeePerGas} Gwei
+                    </>
+                  )
+                }</div>
+                <div onClick={getGasEstimation} className="text-xs cursor-pointer text-muted-foreground flex flex-row gap-2 items-center">
+                  <RotateCcw size={16} />
+                  Refresh
+                </div>
+              </CardContent>
+            </Card>
+
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Choose language
+                </CardTitle>
+
+                <div className="flex flex-row items-center gap-1">
+                  <Languages size={20} />
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col mt-3">
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger className="">
+                    <SelectValue placeholder="Select Language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="es">Español</SelectItem>
+                    <SelectItem value="fr">Français</SelectItem>
+                    <SelectItem value="de">Deutsch</SelectItem>
+                    <SelectItem value="it">Italiano</SelectItem>
+                    <SelectItem value="pt">Português</SelectItem>
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Select Method
+                </CardTitle>
+
+                <div className="flex flex-row items-center gap-1">
+                  <Building2 size={20} />
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col mt-3">
+                <Select value={protocol} onValueChange={setProtocol}>
+                  <SelectTrigger className="">
+                    <SelectValue placeholder="Select Protocol" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="odos">ODOS</SelectItem>
+                    <SelectItem value="askme">Ask Me</SelectItem>
+                    <SelectItem value="txn">Get Info about a txn</SelectItem>
+                    <SelectItem value="swap">Swap</SelectItem>
+                  </SelectContent>
+                </Select>
+              </CardContent>
+            </Card>
+
+          </div>
         </CardHeader>
         <CardContent className="flex-grow overflow-auto px-6 py-6">
-          {protocol === "txn" && !messages.length && (
-            <TxnOptionsSelect />
-          )}
+          {protocol === "txn" && !messages.length && <TxnOptionsSelect />}
           {messages.map((message, index) => (
             <div
               key={index}
-              className={`flex ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              } mb-8`}
+              className={`flex ${message.role === "user" ? "justify-end" : "justify-start"
+                } mb-8`}
             >
               <div
-                className={`flex items-start max-w-[70%] ${
-                  message.role === "user" ? "flex-row-reverse" : ""
-                }`}
+                className={`flex items-start max-w-[70%] ${message.role === "user" ? "flex-row-reverse" : ""
+                  }`}
               >
                 <Avatar className="w-12 h-12">
                   <AvatarFallback>
@@ -628,11 +762,10 @@ View in Inspector: [${inspectorUrl}](${inspectorUrl})
                   )}
                 </Avatar>
                 <div
-                  className={`mx-4 p-5 rounded-lg ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
-                  }`}
+                  className={`mx-4 p-5 rounded-lg ${message.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
+                    }`}
                 >
                   <p className="text-base">{message.content}</p>
                   {message.originalContent && (
@@ -686,18 +819,16 @@ View in Inspector: [${inspectorUrl}](${inspectorUrl})
                 onKeyDown={handleKeyPress}
                 className="flex-grow text-lg"
                 rows={3}
-                placeholder={`Type your command in ${
-                  language === "en" ? "English" : "your selected language"
-                }...`}
+                placeholder={`Type your command in ${language === "en" ? "English" : "your selected language"
+                  }...`}
               />
             ) : (
               <Input
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder={`Type or speak your command in ${
-                  language === "en" ? "English" : "your selected language"
-                }...`}
+                placeholder={`Type or speak your command in ${language === "en" ? "English" : "your selected language"
+                  }...`}
                 className="flex-grow text-lg py-4"
               />
             )}
@@ -710,15 +841,18 @@ View in Inspector: [${inspectorUrl}](${inspectorUrl})
               <PenSquare className="" />
               <span className="sr-only">Toggle edit mode</span>
             </Button>
-            {protocol === "txn" && txnOption && selectedChain && (txnOption === "history" || txHash) && (
-              <Button
-                onClick={handleTxnQuery}
-                disabled={isLoading}
-                className="flex-shrink-0"
-              >
-                {isLoading ? <BeatLoader size={8} /> : "Get Transaction Info"}
-              </Button>
-            )}
+            {protocol === "txn" &&
+              txnOption &&
+              selectedChain &&
+              (txnOption === "history" || txHash) && (
+                <Button
+                  onClick={handleTxnQuery}
+                  disabled={isLoading}
+                  className="flex-shrink-0"
+                >
+                  {isLoading ? <BeatLoader size={8} /> : "Get Transaction Info"}
+                </Button>
+              )}
             {isLoading ? (
               <BeatLoader />
             ) : (
