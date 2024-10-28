@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-MultiChain AI Trading
-=======
 # MultiChain AI Trading Agent 🤖💹
 
 An intelligent conversational interface for executing cross-chain trades and analyzing blockchain transactions using natural language.
@@ -97,4 +94,3 @@ Contributions are welcome! Please read our contributing guidelines and submit pu
 
 ## License
 [Add your license information here]
->>>>>>> 73e749d (fixed the inspector link)
