@@ -39,8 +39,6 @@ import { mainnet } from "thirdweb/chains";
 import { novesChains } from "@/config/noveschains";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { CovalentClient } from "@covalenthq/client-sdk";
-
 import GasFeesTimer from "@/components/bot/GasFeesTimer";
 
 async function translateText(
@@ -152,86 +150,190 @@ export default function MultiChainAITrading() {
     }
   };
 
+  const formatMarkdownResponse = (content: string) => {
+    // Split content into sections based on "###" headers
+    const sections = content.split(/(?=###\s)/).filter(Boolean);
+    
+    // Format the introduction (content before first ###)
+    const intro = sections[0].trim();
+    
+    // Format the remaining sections
+    const formattedSections = sections.slice(1).map(section => {
+      const [title, ...content] = section.split('\n');
+      return {
+        title: title.replace('### ', '').trim(),
+        content: content.join('\n').trim()
+      };
+    });
+
+    return `
+      <div class="space-y-6">
+        <!-- Introduction -->
+        <div class="prose">
+          ${intro}
+        </div>
+
+        <!-- Sections -->
+        ${formattedSections.map(section => `
+          <div class="mt-6">
+            <h3 class="text-lg font-semibold mb-3">${section.title}</h3>
+            <div class="prose">
+              ${section.content}
+            </div>
+          </div>
+        `).join('')}
+
+        <!-- Sources -->
+        ${content.includes('Sources:') ? `
+          <div class="mt-8 border-t pt-4">
+            <h3 class="text-sm font-semibold text-gray-500 mb-2">Sources:</h3>
+            <ul class="space-y-1 text-sm text-gray-600">
+              ${content
+                .split('Sources:')[1]
+                .trim()
+                .split('\n')
+                .map(source => `
+                  <li class="flex items-center gap-2">
+                    <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z"/>
+                    </svg>
+                    ${source.trim()}
+                  </li>
+                `).join('')}
+            </ul>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
+
   const handleSend = async () => {
     if (currentMessage.trim()) {
-      // Checking ODOS chains request first
-      if (currentMessage === "Show me the supported chains for ODOS") {
+      if (protocol === "askme") {
         try {
-          const response = await fetch("https://api.odos.xyz/info/chains");
+          setIsLoading(true);
+          // Add user message immediately
+          setMessages(prev => [...prev, {
+            role: "user",
+            content: currentMessage,
+          }]);
+
+          // Call Brian's knowledge API
+          const response = await fetch("https://api.brianknows.org/api/v0/agent/knowledge", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-brian-api-key": process.env.NEXT_PUBLIC_BRIAN_API_KEY as string,
+            },
+            body: JSON.stringify({
+              prompt: currentMessage,
+            }),
+          });
+
           const data = await response.json();
+          console.log("Brian Response >>", data);
 
-          // Format the chain IDs in a readable way
-          const chainList = data.chains.join(", ");
+          const formattedContent = formatMarkdownResponse(data.result.answer);
 
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "user",
-              content: currentMessage,
-            },
-            {
-              role: "assistant",
-              content: `ODOS supports the following chain IDs: ${chainList}`,
-            },
-          ]);
+          // Add assistant's response
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: {
+              __html: formattedContent.trim()
+            }
+          }]);
+
           setCurrentMessage("");
-          return;
+          setIsLoading(false);
         } catch (error) {
-          console.error("Error fetching ODOS chains:", error);
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              content:
-                "Sorry, I couldn't fetch the supported chains at the moment.",
-            },
-          ]);
-          return;
+          console.error("Error fetching knowledge:", error);
+          setMessages(prev => [...prev, {
+            role: "assistant",
+            content: "Sorry, I encountered an error while processing your question. Please try again."
+          }]);
+          setIsLoading(false);
         }
-      }
+      } else {
+        // Original handleSend logic for other protocols
+        // Checking ODOS chains request first
+        if (currentMessage === "Show me the supported chains for ODOS") {
+          try {
+            const response = await fetch("https://api.odos.xyz/info/chains");
+            const data = await response.json();
 
-      let translatedMessage = currentMessage;
-      let originalMessage = undefined;
+            // Format the chain IDs in a readable way
+            const chainList = data.chains.join(", ");
 
-      if (language !== "en") {
-        translatedMessage = await translateText(currentMessage, "en");
-        originalMessage = currentMessage;
-      }
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "user",
+                content: currentMessage,
+              },
+              {
+                role: "assistant",
+                content: `ODOS supports the following chain IDs: ${chainList}`,
+              },
+            ]);
+            setCurrentMessage("");
+            return;
+          } catch (error) {
+            console.error("Error fetching ODOS chains:", error);
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content:
+                  "Sorry, I couldn't fetch the supported chains at the moment.",
+              },
+            ]);
+            return;
+          }
+        }
 
-      // Only add the user message here if it's not the ODOS chains request
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "user",
-          content: translatedMessage,
-          originalContent: originalMessage,
-        },
-      ]);
-      setCurrentMessage("");
-      setIsEditing(false);
+        let translatedMessage = currentMessage;
+        let originalMessage = undefined;
 
-      // Process the message with Brian
-      const result = await brian.extract({
-        prompt: translatedMessage,
-      });
+        if (language !== "en") {
+          translatedMessage = await translateText(currentMessage, "en");
+          originalMessage = currentMessage;
+        }
 
-      console.log("Brian Result:", result);
+        // Only add the user message here if it's not the ODOS chains request
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "user",
+            content: translatedMessage,
+            originalContent: originalMessage,
+          },
+        ]);
+        setCurrentMessage("");
+        setIsEditing(false);
 
-      // Simulate AI response
-      if (result) {
-        setTimeout(() => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              content: `I've received your command: "${translatedMessage}". ${result
-                ? "I can execute this transaction for you."
-                : "I couldn't process this as a transaction."
-                }`,
-              canExecute: !!result,
-            },
-          ]);
-        }, 1000);
+        // Process the message with Brian
+        const result = await brian.extract({
+          prompt: translatedMessage,
+        });
+
+        console.log("Brian Result:", result);
+
+        // Simulate AI response
+        if (result) {
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "assistant",
+                content: `I've received your command: "${translatedMessage}". ${result
+                  ? "I can execute this transaction for you."
+                  : "I couldn't process this as a transaction."
+                  }`,
+                canExecute: !!result,
+              },
+            ]);
+          }, 1000);
+        }
       }
     }
   };
