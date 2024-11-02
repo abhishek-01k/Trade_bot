@@ -16,7 +16,9 @@ import { Mic, MicOff, PenSquare, Send, Play, Info, Timer, RotateCcw, Languages, 
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -36,6 +38,9 @@ import { BeatLoader } from "react-spinners";
 import { mainnet } from "thirdweb/chains";
 import { novesChains } from "@/config/noveschains";
 import { Skeleton } from "@/components/ui/skeleton";
+
+import { CovalentClient } from "@covalenthq/client-sdk";
+
 import GasFeesTimer from "@/components/bot/GasFeesTimer";
 
 async function translateText(
@@ -376,7 +381,7 @@ export default function MultiChainAITrading() {
           };
           console.log("Tx >>", tx);
 
-          try {
+          try {``
             const hash = await sendAndConfirmTx(tx);
             console.log("Transaction Hash >>", hash);
             setMessages((prev) => [
@@ -638,6 +643,231 @@ export default function MultiChainAITrading() {
     setIsLoading(false);
   };
 
+  const [baseFeePerGas, setBaseFeePerGas] = useState<string>("0");
+  const [timer, setTimer] = useState<number>(60);
+  const [loadingData, setLoadingData] = useState(false);
+
+  const getGasEstimation = async () => {
+
+    try {
+      setLoadingData(true);
+
+      const quicknodewss = process.env.NEXT_PUBLIC_QUICKNODE_WSS || "";
+      
+      const provider = new ethers.WebSocketProvider(
+        quicknodewss
+      );
+
+      console.log("Provider", provider);
+
+      const network = await provider.send("bn_gasPrice", [{ "chainid": 1 }]);
+      console.log("network", network);
+
+      const { blockPrices } = network;
+      const baseFeePerGas = blockPrices[0].baseFeePerGas;
+      setBaseFeePerGas(baseFeePerGas);
+      setTimer(60);
+      setLoadingData(false)
+    } catch (error) {
+      console.log("Error", error);
+      setLoadingData(false)
+
+    }
+  };
+
+  // useEffect(() => {
+  //   getGasEstimation();
+
+  //   const interval = setInterval(() => {
+  //     setTimer((prev) => {
+  //       if (prev <= 1) {
+  //         getGasEstimation();
+  //         return 60;
+  //       }
+  //       return prev - 1;
+  //     });
+  //   }, 1000);
+
+  //   return () => clearInterval(interval);
+  // }, []);
+
+  // Add this new component for Covalent options
+  const CovalentOptionsSelect = () => {
+    const [walletAddress, setWalletAddress] = useState("");
+    const [analysisType, setAnalysisType] = useState("");
+    const [supportedChains, setSupportedChains] = useState([]);
+    const [chain, setChain] = useState("eth-mainnet");
+
+    const handleCovalentQuery = async () => {
+      setIsLoading(true);
+      try {
+        let endpoint = "";
+        switch (analysisType) {
+          case "balances":
+            endpoint = `/v1/${chain}/address/${walletAddress}/balances_v2/`;
+            break;
+          case "transactions":
+            endpoint = `/v1/${chain}/address/${walletAddress}/transactions_v3/`;
+            break;
+          case "transfers":
+            endpoint = `/v1/${chain}/address/${walletAddress}/transfers_v3/`;
+            break;
+          case "approvals":
+            endpoint = `/v1/${chain}/approvals/${walletAddress}/`;
+            break;
+            case "chains":
+              endpoint = `/v1/chains/`;
+              break;
+        }
+
+        const response = await fetch(
+          `https://api.covalenthq.com${endpoint}`,
+          {
+            method: "GET",
+            headers: {
+              accept: "application/json",
+              Authorization: `Bearer ${process.env.NEXT_PUBLIC_COVALENT_API_KEY}`
+            }
+          }
+        );
+
+        const data = await response.json();
+        
+        // Format the response based on analysis type
+        let formattedContent = "";
+        switch (analysisType) {
+          case "balances":
+            formattedContent = `
+              <div>
+                <p><strong>Wallet Balances:</strong></p>
+                ${data.data.items.map(item  => `
+                  <div class="mb-2">
+                    <p>• Token: ${item.contract_name || item.contract_address}</p>
+                    <p>• Balance: ${item.balance / (10 ** item.contract_decimals)} ${item.contract_ticker_symbol}</p>
+                    ${item.quote_rate ? `<p>• Value (USD): $${(item.quote * item.balance / (10 ** item.contract_decimals)).toFixed(2)}</p>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            `;
+            break;
+          // Add other cases for different analysis types
+        }
+
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: {
+            __html: formattedContent.trim()
+          }
+        }]);
+
+      } catch (error) {
+        console.error("Error fetching Covalent data:", error);
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: "Sorry, there was an error fetching the wallet analysis data."
+        }]);
+      }
+      setIsLoading(false);
+    };
+
+    useEffect(() => {
+      const fetchSupportedChains = async () => {
+        try {
+          const response = await fetch(
+            "https://api.covalenthq.com/v1/chains/",
+            {
+              method: "GET", 
+              headers: {
+                accept: "application/json",
+                Authorization: `Bearer ${process.env.NEXT_PUBLIC_COVALENT_API_KEY}`
+              }
+            }
+          );
+          const data = await response.json();
+
+          console.log(data, "data");
+          const supportedChains = data.data.items.map((chain: any) => ({
+            name: chain.name,
+            chainId: chain.chain_id,
+            isTestnet: chain.is_testnet
+          }));
+          console.log(supportedChains, "supported chains");
+          // Filter out testnets if needed
+          const mainnetChains = supportedChains.filter((chain: any) => !chain.isTestnet);
+          console.log(mainnetChains, "mainnet chains");
+          setSupportedChains(mainnetChains);
+        } catch (error) {
+          console.error("Error fetching supported chains:", error);
+        }
+      };
+
+      fetchSupportedChains();
+    }, []);
+
+    console.log(supportedChains, "supported chains");
+
+    return (
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Analysis Type</div>
+          <Select value={analysisType} onValueChange={setAnalysisType}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select Analysis Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Analysis Options</SelectLabel>
+                <SelectItem value="balances">Token Balances</SelectItem>
+                <SelectItem value="transactions">Transaction History</SelectItem>
+                <SelectItem value="transfers">Token Transfers</SelectItem>
+                <SelectItem value="approvals">Token Approvals</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Wallet Address</div>
+          <Input 
+            placeholder="Enter wallet address" 
+            value={walletAddress}
+            onChange={(e) => setWalletAddress(e.target.value)}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Chain</div>
+          <Select value={selectedChain} onValueChange={setSelectedChain}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select Chain" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Available Chains</SelectLabel>
+                {supportedChains.map((chain) => (
+                  <SelectItem key={chain.chainId} value={chain.chainId.toString()}>
+                    {chain.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+
+
+
+        {walletAddress && analysisType && (
+          <Button 
+            onClick={handleCovalentQuery}
+            className="w-full"
+          >
+            Analyze Wallet
+          </Button>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       <Card className="w-full max-w-6xl mx-auto h-[700px] flex flex-col p-6">
@@ -668,6 +898,7 @@ export default function MultiChainAITrading() {
                     <SelectItem value="fr">Français</SelectItem>
                     <SelectItem value="de">Deutsch</SelectItem>
                     <SelectItem value="it">Italiano</SelectItem>
+                    <SelectItem value="hi">हिंदी</SelectItem>
                     <SelectItem value="pt">Português</SelectItem>
                   </SelectContent>
                 </Select>
@@ -693,6 +924,7 @@ export default function MultiChainAITrading() {
                     <SelectItem value="askme">Ask Me</SelectItem>
                     <SelectItem value="txn">Get Info about a txn</SelectItem>
                     <SelectItem value="swap">Swap</SelectItem>
+                    <SelectItem value="covalent">Analyse Wallet</SelectItem>
                   </SelectContent>
                 </Select>
               </CardContent>
@@ -701,6 +933,7 @@ export default function MultiChainAITrading() {
           </div>
         </CardHeader>
         <CardContent className="flex-grow overflow-auto px-6 py-6">
+          {protocol === "covalent" && !messages.length && <CovalentOptionsSelect />}
           {protocol === "txn" && !messages.length && <TxnOptionsSelect />}
           {messages.map((message, index) => (
             <div
