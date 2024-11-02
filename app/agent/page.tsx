@@ -12,7 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Mic, MicOff, PenSquare, Send, Play, Info, Timer, RotateCcw, Languages, Building2 } from "lucide-react";
+import { Mic, MicOff, PenSquare, Send, Play, Info, Timer, RotateCcw, Languages, Building2, Bot, UserRound } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -714,7 +714,12 @@ export default function MultiChainAITrading() {
               >
                 <Avatar className="w-12 h-12">
                   <AvatarFallback>
-                    {message.role === "user" ? "U" : "AI"}
+                    {message.role === "user" ?
+                      (
+                        <UserRound />
+                      ) : (
+                        <Bot />
+                      )}
                   </AvatarFallback>
                   {message.role === "assistant" && (
                     <AvatarImage
