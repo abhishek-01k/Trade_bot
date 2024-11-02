@@ -36,6 +36,7 @@ import { BeatLoader } from "react-spinners";
 import { mainnet } from "thirdweb/chains";
 import { novesChains } from "@/config/noveschains";
 import { Skeleton } from "@/components/ui/skeleton";
+import GasFeesTimer from "@/components/bot/GasFeesTimer";
 
 async function translateText(
   text: string,
@@ -78,29 +79,31 @@ export default function MultiChainAITrading() {
   const [txHash, setTxHash] = useState("");
   const [historicalAddress, setHistoricalAddress] = useState("");
 
-  useEffect(() => {
-    let timer: NodeJS.Timeout | null = null; // Declare timer variable
+  // useEffect(() => {
+  //   let timer: NodeJS.Timeout | null = null; // Declare timer variable
 
-    if (isActive) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev === 1) {
-            setQuotePathId("");
-            return totalTime; // Reset timer to 60 seconds
-          }
-          return prev - 1; // Decrease timer
-        });
-      }, 1000); // Update every second
-    }
+  //   if (isActive) {
+  //     timer = setInterval(() => {
+  //       setTimeLeft((prev) => {
+  //         if (prev === 1) {
+  //           setQuotePathId("");
+  //           return totalTime; // Reset timer to 60 seconds
+  //         }
+  //         return prev - 1; // Decrease timer
+  //       });
+  //     }, 1000); // Update every second
+  //   }
 
-    return () => {
-      if (timer) clearInterval(timer); // Cleanup on unmount
-    };
-  }, [isActive]);
+  //   return () => {
+  //     if (timer) clearInterval(timer); // Cleanup on unmount
+  //   };
+  // }, [isActive]);
 
   // const { address } = useWeb3ModalAccount()
   const activeAccount = useActiveAccount();
   const wallet = useActiveWallet();
+
+  console.log("This runs");
 
   const userWalletAddress = activeAccount?.address;
 
@@ -543,11 +546,11 @@ export default function MultiChainAITrading() {
             }
           );
 
-          console.log(keyResponse, "key response" , keyResponse.text());
+          console.log(keyResponse, "key response", keyResponse.text());
           const generatedKey = await keyResponse.text();
 
           const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${tx.transactionHash}?key=${generatedKey}`;
-          
+
           setMessages(prev => [...prev, {
             role: "assistant",
             content: {
@@ -582,7 +585,7 @@ export default function MultiChainAITrading() {
           }
         );
         const data = await response.json();
-        
+
         const keyResponse = await fetch(
           `https://extension-gateway.noves.fi/evm/${selectedChain}/generateInspectorLink/${txHash}`,
           {
@@ -598,7 +601,7 @@ export default function MultiChainAITrading() {
         console.log(a, "a");
 
         const inspectorUrl = `https://inspector.noves.fi/${selectedChain}/${txHash}?key=${a}`;
-        
+
         setMessages(prev => [...prev, {
           role: "assistant",
           content: {
@@ -635,57 +638,6 @@ export default function MultiChainAITrading() {
     setIsLoading(false);
   };
 
-  const [baseFeePerGas, setBaseFeePerGas] = useState<string>("0");
-  const [timer, setTimer] = useState<number>(60);
-  const [loadingData, setLoadingData] = useState(false);
-
-  const getGasEstimation = async () => {
-
-    try {
-      setLoadingData(true);
-
-      const quicknodewss = process.env.NEXT_PUBLIC_QUICKNODE_WSS || "";
-      
-      const provider = new ethers.WebSocketProvider(
-        quicknodewss
-      );
-
-      console.log("Provider", provider);
-
-      const network = await provider.send("bn_gasPrice", [{ "chainid": 1 }]);
-      console.log("network", network);
-
-      const { blockPrices } = network;
-      const baseFeePerGas = blockPrices[0].baseFeePerGas;
-      setBaseFeePerGas(baseFeePerGas);
-      setTimer(60);
-      setLoadingData(false)
-    } catch (error) {
-      console.log("Error", error);
-      setLoadingData(false)
-
-    }
-  };
-
-  useEffect(() => {
-    getGasEstimation();
-
-    const interval = setInterval(() => {
-      setTimer((prev) => {
-        if (prev <= 1) {
-          getGasEstimation();
-          return 60;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-
-
-
   return (
     <>
       <Card className="w-full max-w-6xl mx-auto h-[700px] flex flex-col p-6">
@@ -694,35 +646,7 @@ export default function MultiChainAITrading() {
             Multichain AI Trading
           </CardTitle>
           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-3">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Base Gas Fees
-                </CardTitle>
-
-                <div className="flex flex-row items-center gap-1">
-                  <Timer size={20} />
-                  <span className="text-sm">{timer}</span>
-                </div>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                <div className="text-2xl font-bold">{
-                  loadingData ? (
-                    <Skeleton className="h-8 max-w-32" />
-                  ) : (
-                    <>
-                      {baseFeePerGas} Gwei
-                    </>
-                  )
-                }</div>
-                <div onClick={getGasEstimation} className="text-xs cursor-pointer text-muted-foreground flex flex-row gap-2 items-center">
-                  <RotateCcw size={16} />
-                  Refresh
-                </div>
-              </CardContent>
-            </Card>
-
-
+            <GasFeesTimer />
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
@@ -808,7 +732,7 @@ export default function MultiChainAITrading() {
                   {typeof message.content === 'string' ? (
                     <p className="text-base">{message.content}</p>
                   ) : (
-                    <div 
+                    <div
                       className="text-base"
                       dangerouslySetInnerHTML={message.content}
                     />
@@ -832,7 +756,7 @@ export default function MultiChainAITrading() {
               </div>
             </div>
           ))}
-          <div ref={messagesEndRef} />
+          {/* <div ref={messagesEndRef} /> */}
         </CardContent>
         <CardFooter className="px-6 py-6">
           <div className="flex w-full items-center space-x-4">
