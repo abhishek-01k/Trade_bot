@@ -66,9 +66,11 @@ MultiChain AI Trading Agent simplifies blockchain interactions by providing a na
 
 ```
 "Swap 100 USDC to ETH on Arbitrum"
+"Swap 0.00005 ETH to PYUSD on Ethereum"
 "Show me the supported chains for ODOS"
-"Get transaction details for [hash]"
+"Get transaction details for [transaction hash]"
 "Show my wallet history on Ethereum"
+"What is Uniswap?"
 ```
 
 ## Security Features

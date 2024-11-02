@@ -450,7 +450,7 @@ export default function MultiChainAITrading() {
       );
 
       if (action === "swap") {
-        await handleSwap({
+        await handleRootstockSwap({
           fromChainId: Number(sourceChainToken.chainId),
           toChainId: Number(destinationChainToken.chainId),
           fromTokenAddress: sourceChainToken.address,
@@ -510,7 +510,7 @@ export default function MultiChainAITrading() {
   };
 
   // @kamal call this func according to the payloads LIFI
-  const handleSwap = async ({
+  const handleRootstockSwap = async ({
     fromChainId,
     toChainId,
     fromTokenAddress,
@@ -1025,7 +1025,7 @@ export default function MultiChainAITrading() {
                     <SelectItem value="odos">ODOS</SelectItem>
                     <SelectItem value="askme">Ask Me</SelectItem>
                     <SelectItem value="txn">Get Info about a txn</SelectItem>
-                    <SelectItem value="swap">Swap</SelectItem>
+                    <SelectItem value="swap">Lets do a Transaction</SelectItem>
                     <SelectItem value="covalent">Analyse Wallet</SelectItem>
                   </SelectContent>
                 </Select>
