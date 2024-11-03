@@ -88,17 +88,17 @@ MultiChain AI Trading Agent simplifies blockchain interactions by providing a na
 
 ### Code Review
 
-1. PYUSD Integration
+## 1. PYUSD Integration
 
-2. Noves Translation API
+## 2. Noves Translation API
 
-3. QuickNode Addson Utilised 
+## 3. QuickNode Addson Utilised 
 
-4. Quicknode Streams utilised.
+## 4. Quicknode Streams utilised.
 
-5. GoldRush Addon
+## 5. GoldRush Addon
 
-6. Blockscout Integration
+## 6. Blockscout Integration
 
 ## Technical Requirements
 - Web3 wallet (MetaMask, etc.)
